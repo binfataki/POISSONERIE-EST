@@ -1,0 +1,25 @@
+{
+  "name": "Poissonnerie de l'Est - Administration",
+  "short_name": "Poissonnerie Admin",
+  "description": "Dashboard admin installable pour la Poissonnerie de l'Est.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f1e7",
+  "theme_color": "#073b3a",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
