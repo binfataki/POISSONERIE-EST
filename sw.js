@@ -1,66 +1,55 @@
-/**
- * Service worker — Espace fournisseur POISSONNERIE DE L'EST
- *
- * Rôle : mettre en cache la coquille de l'application (HTML/manifest/icônes)
- * pour qu'elle s'ouvre hors ligne après une première visite. Les données
- * fournisseur (entrées, paiements, reçus) sont gérées séparément par l'app
- * elle-même via localStorage — ce service worker ne touche pas aux appels
- * réseau vers Apps Script, il les laisse passer normalement.
- *
- * Pour forcer une mise à jour chez les fournisseurs après une modification
- * de l'app, incrémentez CACHE_VERSION ci-dessous.
+/* Service worker — Poissonnerie de l'Est
+ * - Coquille de l'application mise en cache : le dashboard s'ouvre hors ligne.
+ * - Pages : réseau d'abord (les mises à jour arrivent vite), cache en secours.
+ * - Fichiers statiques : cache d'abord, rafraîchi en arrière-plan.
+ * - Appels Apps Script (autre domaine) : jamais interceptés.
+ * Pour forcer une mise à jour chez tous les utilisateurs, changer CACHE_VERSION.
  */
-const CACHE_VERSION = 'pde-supplier-v3';
-const APP_SHELL = [
-  './index.html',
-  './manifest.webmanifest',
-  './logo.png',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-maskable-512.png'
-];
+const CACHE_VERSION = 'pe-v3';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './logo.png'];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_VERSION)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
-  );
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_VERSION);
+    // logo.png est facultatif : un fichier absent ne doit pas bloquer l'installation
+    await Promise.allSettled(SHELL.map(url => cache.add(new Request(url, { cache: 'reload' }))));
+    await self.skipWaiting();
+  })());
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', event => {
   const req = event.request;
+  if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return; // Apps Script, polices, etc. : réseau direct
 
-  // Ne jamais intercepter les appels vers l'API Apps Script (autre origine) :
-  // on laisse le navigateur gérer le réseau/l'échec normalement, l'app gère
-  // elle-même son propre cache de données (localStorage) et le mode hors ligne.
-  if (url.origin !== self.location.origin) return;
+  if (req.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req);
+        if (fresh && fresh.ok) { const c = await caches.open(CACHE_VERSION); c.put('./index.html', fresh.clone()); }
+        return fresh;
+      } catch (e) {
+        return (await caches.match('./index.html')) || (await caches.match('./')) || Response.error();
+      }
+    })());
+    return;
+  }
 
-  // Coquille de l'app : cache d'abord, réseau en secours, et on met à jour
-  // silencieusement le cache quand le réseau répond.
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+  event.respondWith((async () => {
+    const cached = await caches.match(req);
+    const network = fetch(req).then(async res => {
+      if (res && res.ok) { const c = await caches.open(CACHE_VERSION); c.put(req, res.clone()); }
+      return res;
+    }).catch(() => null);
+    return cached || (await network) || Response.error();
+  })());
 });
