@@ -50,6 +50,10 @@ button,input,select{font:inherit;color:inherit}
 .pill.on{background:var(--okbg);color:var(--ok)} .pill.off{background:var(--badbg);color:var(--bad)}
 .pill.wait{background:var(--warnbg);color:var(--warn)} .pill.sync{background:var(--infobg);color:var(--info)}
 .pill.sync i{animation:pulse 1s infinite}
+.sync-now{position:relative;z-index:1;min-width:44px;border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff}
+.sync-now svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sync-now span{display:none}
+@media (min-width:760px){.sync-now{padding:0 16px}.sync-now span{display:inline}}
 @keyframes pulse{50%{opacity:.25}}
 
 /* ---------- Navigation basse ---------- */
@@ -205,6 +209,7 @@ label.f>span.l{display:block;margin-bottom:5px;color:var(--muted);font-size:13px
     <span class="mark" id="mark">PE</span>
     <div class="brand-txt"><b>POISSONNERIE DE L'EST</b><span>Dashboard admin</span></div>
   </div>
+  <button class="btn sync-now" id="sync-now" data-act="manual-sync" type="button" aria-label="Synchroniser maintenant" title="Synchroniser maintenant"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M18 2v4h4"/><path d="M6 22v-4H2"/></svg><span>Synchroniser</span></button>
   <button class="pill off" id="pill" type="button" aria-live="polite"><i></i><span>…</span></button>
 </header>
 <main id="view"></main>
@@ -839,14 +844,15 @@ PAGES.settings = {
   render() {
     return `<div class="page-h"><h1>Paramètres</h1></div>
       <div class="panel"><h3>État</h3><div id="set-status">${settingsStatusHtml()}</div>
-        <button class="btn block" data-act="refresh" style="margin-top:10px">Actualiser les données</button></div>
+        <button class="btn primary block" data-act="manual-sync" style="margin-top:10px">Synchroniser maintenant</button>
+        <button class="btn block" data-act="refresh" style="margin-top:8px">Actualiser les données</button></div>
       <div class="panel"><h3>Connexion au système</h3>
         <label class="f"><span class="l">Lien de synchronisation</span><input class="in" id="api-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://..." value="${esc(S.apiUrl)}"></label>
         <div class="two"><button class="btn" data-act="test-api">Tester la connexion</button><button class="btn primary" data-act="save-api">Sauvegarder</button></div>
         <button class="btn ghost block" data-act="reset-api" style="margin-top:8px">Remettre le lien par défaut</button>
         <div class="res" id="api-res" role="status"></div></div>
       <div class="panel"><h3>Opérations en attente</h3><div id="set-queue">${queueHtml()}</div></div>
-      <p class="hint">Version ${APP_VERSION}. Les opérations en attente sont envoyées automatiquement dès que la connexion revient (aucun bouton à presser).</p>`;
+      <p class="hint">Version ${APP_VERSION}. Les opérations en attente partent automatiquement dès que la connexion revient. Le bouton Synchroniser maintenant sert de secours si le téléphone tarde à relancer l'app.</p>`;
   },
   refresh() { const a = $('#set-status'), b = $('#set-queue'); if (a) a.innerHTML = settingsStatusHtml(); if (b) b.innerHTML = queueHtml(); }
 };
@@ -1054,6 +1060,15 @@ const ACTIONS = {
     res.className = 'res ' + (DEFAULT_API_URL ? 'ok' : ''); res.textContent = DEFAULT_API_URL ? '✓ Lien par défaut rétabli.' : 'Aucun lien par défaut défini dans l\'application : le champ est vide.';
     updateStatus();
   },
+  async 'manual-sync'() {
+    if (!S.apiUrl) { toast('Lien de synchronisation manquant', 'bad'); location.hash = '#/settings'; return; }
+    if (!navigator.onLine) { updateStatus(); toast('Téléphone hors ligne : opération gardée en attente', 'bad'); refreshData(); return; }
+    S.lastError = ''; S.reachable = null; updateStatus();
+    toast('Synchronisation en cours…');
+    await sync({ pull: true });
+    if (!S.lastError && S.reachable !== false && !failedCount()) toast(pendingCount() ? 'Certaines opérations restent en attente' : 'Synchronisation terminée', pendingCount() ? 'wait' : 'ok');
+    else toast('Synchronisation impossible : ' + (S.lastError || 'connexion instable'), 'bad');
+  },
   async refresh() { toast('Actualisation…'); await sync(); if (!S.lastError && S.reachable !== false) toast('Données à jour', 'ok'); else toast('Impossible d\'actualiser : ' + (S.lastError || 'hors ligne'), 'bad'); },
   'retry-op'(el) { const op = S.queue.find(o => o.requestId === el.dataset.id); if (op) { op.failed = false; op.error = ''; saveQueue(); bump(); refreshData(); updateStatus(); sync(); } },
   'del-op'(el) { if (!confirm('Supprimer définitivement cette opération refusée ?')) return; S.queue = S.queue.filter(o => o.requestId !== el.dataset.id); saveQueue(); bump(); refreshData(); updateStatus(); }
@@ -1096,3 +1111,4 @@ init();
 </script>
 </body>
 </html>
+
