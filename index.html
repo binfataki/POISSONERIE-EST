@@ -225,7 +225,7 @@ label.f>span.l{display:block;margin-bottom:5px;color:var(--muted);font-size:13px
 
 // Lien de synchronisation par défaut.
 // Peut rester vide : le lien se règle alors dans Paramètres.
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbz5IOIjSV8gccr8VrWVsAr7zGxpL40y66E2vqXOxJqqf8luBe_RFgoKAPlMMxwgZDWftA/exec';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbz8UUV3W_MPOHDPKnplotVXoTpCgfVNjGK8ZixYtuSkqpaf3n2zPQmHrko_1pk-LOmxjw/exec';
 const APP_VERSION = '1.1.1';
 const LOGO_SRC = 'logo.png';
 const DEFAULT_TARIFFS = { kg: 0.05, colis: 5 };
@@ -293,7 +293,18 @@ function loadState() {
   const q = lsGet(LS.queue, []);
   S.queue = Array.isArray(q) ? q : [];
   const saved = lsGet(LS.api, null);
-  S.apiUrl = (typeof saved === 'string' && saved.trim()) ? saved.trim() : DEFAULT_API_URL;
+  const savedUrl = (typeof saved === 'string' && saved.trim()) ? saved.trim() : '';
+  const oldDeployments = [
+    'https://script.google.com/macros/s/AKfycbz5IOIjSV8gccr8VrWVsAr7zGxpL40y66E2vqXOxJqqf8luBe_RFgoKAPlMMxwgZDWftA/exec',
+    'https://script.google.com/macros/s/AKfycbytIcbrZicNcOnYxfNXEwfdPURT-c5jjS3OdaFBXynXZOxcc9fOX4Ynf-WhNFrShV6aHg/exec',
+    'https://script.google.com/macros/s/AKfycbx5pv8eaXuJDcXhMOuGmiQVIH2gcw_dtnCEF4760hdWkiQhugruxtHLzJyfA1asFW2VxQ/exec'
+  ];
+  if (!savedUrl || oldDeployments.includes(savedUrl)) {
+    S.apiUrl = DEFAULT_API_URL;
+    try { localStorage.removeItem(LS.api); } catch (e) { /* ignore */ }
+  } else {
+    S.apiUrl = savedUrl;
+  }
 }
 const saveCache = () => lsSet(LS.cache, { server: S.server, lastPull: S.lastPull });
 const saveQueue = () => lsSet(LS.queue, S.queue);
@@ -1111,4 +1122,5 @@ init();
 </script>
 </body>
 </html>
+
 
